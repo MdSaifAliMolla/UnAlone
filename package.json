@@ -1,0 +1,25 @@
+{
+  "name": "unalone",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "services/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:client && npm run install:services",
+    "install:client": "cd client && npm install",
+    "install:services": "cd services/1-api-gateway && npm install && cd ../2-auth-service && npm install && cd ../3-meetup-service && npm install && cd ../4-geospatial-service && npm install && cd ../5-chat-service && npm install",
+    "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:auth\" \"npm run dev:meetup\" \"npm run dev:geo\" \"npm run dev:chat\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm start",
+    "dev:gateway": "cd services/1-api-gateway && npm run dev",
+    "dev:auth": "cd services/2-auth-service && npm run dev",
+    "dev:meetup": "cd services/3-meetup-service && npm run dev",
+    "dev:geo": "cd services/4-geospatial-service && npm run dev",
+    "dev:chat": "cd services/5-chat-service && npm run dev",
+    "build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  }
+}

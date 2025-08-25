@@ -1,0 +1,99 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+const app = express();
+app.set('trust proxy', 1);
+
+const PORT = process.env.PORT || 4000;
+
+// --- Middlewares first ---
+app.use(cors());
+app.use(express.json());
+
+// Rate limiting (100 requests per 15 minutes per IP)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
+
+// --- Services ---
+const services = {
+  auth: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
+  meetup: process.env.MEETUP_SERVICE_URL || 'http://localhost:3002',
+  geospatial: process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:3003',
+  chat: process.env.CHAT_SERVICE_URL || 'http://localhost:3004'
+};
+
+// --- Health check ---
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'API Gateway is running',
+    services
+  });
+});
+
+// --- Proxy helper with body forwarding ---
+const createProxy = (target, enableWs = false) => createProxyMiddleware({
+  target,
+  changeOrigin: true,
+  ws: enableWs,
+  logLevel: 'debug',
+  onProxyReq: (proxyReq, req) => {
+    if (req.body && Object.keys(req.body).length) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+    console.log(`→ Proxying ${req.method} ${req.originalUrl} → ${target}`);
+  },
+  onError: (err, req, res) => {
+    console.error(`Proxy error for ${target}:`, err.message);
+    res.status(503).json({
+      error: 'Service temporarily unavailable',
+      message: 'Please try again later'
+    });
+  }
+});
+
+// --- Route proxies ---
+app.use('/api/auth', createProxy(services.auth));
+app.use('/api/meetups', createProxy(services.meetup));
+app.use('/api/geo', createProxy(services.geospatial));
+app.use('/api/chat', createProxy(services.chat));
+
+// WebSocket proxy for chat service
+app.use('/socket.io', createProxy(services.chat, true));
+
+// --- Catch-all 404 ---
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: 'The requested endpoint does not exist'
+  });
+});
+
+// --- Global error handler ---
+app.use((err, req, res, next) => {
+  console.error('Gateway error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: 'Something went wrong'
+  });
+});
+
+// --- Start server ---
+app.listen(PORT, () => {
+  console.log(`🚀 API Gateway running on port ${PORT}`);
+  console.log('Service routes:');
+  console.log(`- Auth: /api/auth -> ${services.auth}`);
+  console.log(`- Meetup: /api/meetups -> ${services.meetup}`);
+  console.log(`- Geospatial: /api/geo -> ${services.geospatial}`);
+  console.log(`- Chat: /api/chat -> ${services.chat}`);
+  console.log(`- WebSocket: /socket.io -> ${services.chat}`);
+});
