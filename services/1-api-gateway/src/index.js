@@ -1,10 +1,13 @@
+// services/1-api-gateway/src/index.js
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
+const server = http.createServer(app);
 app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 4000;
@@ -29,11 +32,32 @@ const services = {
   chat: process.env.CHAT_SERVICE_URL || 'http://localhost:3004'
 };
 
-// --- Health check ---
+// --- Health checks ---
 app.get('/health', (req, res) => {
   res.json({
     status: 'API Gateway is running',
-    services
+    services,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Comprehensive health check for all services
+app.get('/api/health/all', async (req, res) => {
+  const healthChecks = { gateway: 'healthy' };
+  
+  for (const [name, url] of Object.entries(services)) {
+    try {
+      const axios = require('axios');
+      const response = await axios.get(`${url}/health`, { timeout: 5000 });
+      healthChecks[name] = response.status === 200 ? 'healthy' : 'unhealthy';
+    } catch (error) {
+      healthChecks[name] = 'unreachable';
+    }
+  }
+  
+  res.json({
+    services: healthChecks,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -54,10 +78,13 @@ const createProxy = (target, enableWs = false) => createProxyMiddleware({
   },
   onError: (err, req, res) => {
     console.error(`Proxy error for ${target}:`, err.message);
-    res.status(503).json({
-      error: 'Service temporarily unavailable',
-      message: 'Please try again later'
-    });
+    if (!res.headersSent) {
+      res.status(503).json({
+        error: 'Service temporarily unavailable',
+        message: 'Please try again later',
+        service: target
+      });
+    }
   }
 });
 
@@ -67,28 +94,38 @@ app.use('/api/meetups', createProxy(services.meetup));
 app.use('/api/geo', createProxy(services.geospatial));
 app.use('/api/chat', createProxy(services.chat));
 
-// WebSocket proxy for chat service
-app.use('/socket.io', createProxy(services.chat, true));
+// WebSocket proxy for chat service with proper upgrade handling
+const wsProxy = createProxy(services.chat, true);
+app.use('/socket.io', wsProxy);
+
+// Handle WebSocket upgrade events
+server.on('upgrade', (request, socket, head) => {
+  console.log(`🔌 WebSocket upgrade request: ${request.url}`);
+  wsProxy.upgrade(request, socket, head);
+});
 
 // --- Catch-all 404 ---
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Not Found',
-    message: 'The requested endpoint does not exist'
+    message: 'The requested endpoint does not exist',
+    path: req.originalUrl
   });
 });
 
 // --- Global error handler ---
 app.use((err, req, res, next) => {
   console.error('Gateway error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: 'Something went wrong'
-  });
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Something went wrong'
+    });
+  }
 });
 
 // --- Start server ---
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 API Gateway running on port ${PORT}`);
   console.log('Service routes:');
   console.log(`- Auth: /api/auth -> ${services.auth}`);
@@ -96,4 +133,5 @@ app.listen(PORT, () => {
   console.log(`- Geospatial: /api/geo -> ${services.geospatial}`);
   console.log(`- Chat: /api/chat -> ${services.chat}`);
   console.log(`- WebSocket: /socket.io -> ${services.chat}`);
+  console.log(`- Health check: http://localhost:${PORT}/api/health/all`);
 });

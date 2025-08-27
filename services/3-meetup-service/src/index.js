@@ -1,25 +1,28 @@
-// Enhanced meetup service startup (replace your index.js)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { sequelize } = require('./models');
+const { connectProducer } = require('./kafka/producer');
 
 console.log('🚀 Starting Meetup Service...');
-console.log('🌍 Environment Variables:');
-console.log('- NODE_ENV:', process.env.NODE_ENV || 'not set');
-console.log('- PORT:', process.env.PORT || 'not set');
-console.log('- DATABASE_URL:', process.env.DATABASE_URL ? 'Present' : 'Missing');
-console.log('- KAFKA_BROKER_URL:', process.env.KAFKA_BROKER_URL ? 'Present' : 'Missing');
-console.log('- JWT_SECRET:', process.env.JWT_SECRET ? 'Present' : 'Missing');
+console.log('Environment check:', {
+  PORT: process.env.PORT || 3002,
+  DATABASE_URL: process.env.DATABASE_URL ? 'Present' : 'Missing',
+  KAFKA_BROKER_URL: process.env.KAFKA_BROKER_URL ? 'Present' : 'Missing',
+  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing'
+});
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:4000'],
+  credentials: true
+}));
 app.use(express.json());
 
-// Import routes (with error handling)
+// Import routes
 let meetupRoutes;
 try {
   meetupRoutes = require('./routes/meetupRoutes');
@@ -30,7 +33,7 @@ try {
 }
 
 // Routes
-app.use('/api/meetups', meetupRoutes);
+app.use('/', meetupRoutes); // Changed from '/api/meetups' to '/' since gateway handles prefix
 
 // Health check
 app.get('/health', (req, res) => {
@@ -43,7 +46,7 @@ app.get('/health', (req, res) => {
 
 // Error handling middleware
 app.use((error, req, res, next) => {
-  console.error('💥 Unhandled error:', error);
+  console.error('💥 Meetup service error:', error);
   res.status(500).json({ 
     message: 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -55,41 +58,32 @@ const startServer = async () => {
   try {
     console.log('🔌 Testing database connection...');
     await sequelize.authenticate();
-    console.log('✅ Database connection established successfully');
+    console.log('✅ Database connection established');
     
     console.log('🔄 Syncing database schema...');
     await sequelize.sync({ force: false });
     console.log('✅ Database synced successfully');
     
-    // Test if Meetup model works
+    // Test Meetup model
     console.log('🧪 Testing Meetup model...');
     const { Meetup } = require('./models');
-    console.log('- Meetup model loaded:', !!Meetup);
-    console.log('- Meetup.create function:', typeof Meetup.create);
-    
-    // Try a simple query
     const count = await Meetup.count();
-    console.log('- Existing meetups in DB:', count);
-    console.log('✅ Meetup model test passed');
+    console.log('✅ Meetup model working, existing meetups:', count);
     
     // Initialize Kafka (non-blocking)
-    console.log('📨 Initializing Kafka...');
+    console.log('📨 Initializing Kafka producer...');
     try {
-      const { createProducer } = require('./kafka/producer');
-      if (createProducer) {
-        await createProducer();
-        console.log('✅ Kafka initialized successfully');
-      }
+      await connectProducer();
+      console.log('✅ Kafka producer connected');
     } catch (kafkaError) {
-      console.log('⚠️ Kafka initialization failed (continuing without Kafka):', kafkaError.message);
+      console.log('⚠️ Kafka connection failed (continuing without Kafka):', kafkaError.message);
     }
     
     app.listen(PORT, () => {
       console.log('🎉 ===== MEETUP SERVICE STARTED =====');
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 Health check: http://localhost:${PORT}/health`);
-      console.log(`📍 API endpoint: http://localhost:${PORT}/api/meetups`);
-      console.log('================================');
+      console.log('=================================');
     });
     
   } catch (error) {
@@ -98,7 +92,7 @@ const startServer = async () => {
     if (error.name === 'SequelizeConnectionError') {
       console.error('Database connection details:');
       console.error('- Check if PostgreSQL is running');
-      console.error('- Verify DATABASE_URL in .env file');
+      console.error('- Verify DATABASE_URL in environment');
       console.error('- Ensure database "unalone" exists');
     }
     
