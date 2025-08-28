@@ -9,14 +9,14 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - "5432:5432"
+      - "15432:5432"   # Host 15432 → Container 5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "16379:6379"   # Host 16379 → Container 6379
     volumes:
       - redis_data:/data
 
@@ -26,28 +26,9 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
     ports:
-      - "27017:27017"
+      - "27018:27017"  # Host 27018 → Container 27017
     volumes:
       - mongodb_data:/data/db
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-  kafka:
-    image: confluentinc/cp-kafka:7.2.1
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   # Services
   api-gateway:
@@ -56,10 +37,10 @@ services:
       - "4000:4000"
     environment:
       PORT: 4000
-      AUTH_SERVICE_URL: http://auth-service:5001
-      MEETUP_SERVICE_URL: http://meetup-service:5002
-      GEOSPATIAL_SERVICE_URL: http://geospatial-service:5003
-      CHAT_SERVICE_URL: http://chat-service:5004
+      AUTH_SERVICE_URL: http://auth-service:3001
+      MEETUP_SERVICE_URL: http://meetup-service:3002
+      GEOSPATIAL_SERVICE_URL: http://geospatial-service:3003
+      CHAT_SERVICE_URL: http://chat-service:3004
     depends_on:
       - auth-service
       - meetup-service
@@ -69,7 +50,7 @@ services:
   auth-service:
     build: ./services/2-auth-service
     ports:
-      - "5001:3001"
+      - "3001:3001"
     environment:
       PORT: 3001
       DATABASE_URL: postgresql://postgres:password@postgres:5432/unalone
@@ -80,34 +61,34 @@ services:
   meetup-service:
     build: ./services/3-meetup-service
     ports:
-      - "5002:3002"
+      - "3002:3002"
     environment:
       PORT: 3002
       DATABASE_URL: postgresql://postgres:password@postgres:5432/unalone
-      KAFKA_BROKER_URL: kafka:9092
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      GEOSPATIAL_SERVICE_URL: http://geospatial-service:3003
     depends_on:
       - postgres
-      - kafka
+      - geospatial-service
 
   geospatial-service:
     build: ./services/4-geospatial-service
     ports:
-      - "5003:3003"
+      - "3003:3003"
     environment:
       PORT: 3003
       REDIS_URL: redis://redis:6379
-      KAFKA_BROKER_URL: kafka:9092
     depends_on:
       - redis
-      - kafka
 
   chat-service:
     build: ./services/5-chat-service
     ports:
-      - "5004:3004"
+      - "3004:3004"
     environment:
       PORT: 3004
       MONGODB_URL: mongodb://admin:password@mongodb:27017/unalone?authSource=admin
+      CLIENT_URL: http://localhost:3000
     depends_on:
       - mongodb
 

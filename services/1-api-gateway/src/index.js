@@ -1,4 +1,3 @@
-// services/1-api-gateway/src/index.js
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
@@ -13,7 +12,10 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4000;
 
 // --- Middlewares first ---
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Rate limiting (100 requests per 15 minutes per IP)
@@ -66,7 +68,7 @@ const createProxy = (target, enableWs = false) => createProxyMiddleware({
   target,
   changeOrigin: true,
   ws: enableWs,
-  logLevel: 'debug',
+  timeout: 30000,
   onProxyReq: (proxyReq, req) => {
     if (req.body && Object.keys(req.body).length) {
       const bodyData = JSON.stringify(req.body);

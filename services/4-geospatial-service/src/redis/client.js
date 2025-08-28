@@ -2,21 +2,9 @@ const { createClient } = require('redis');
 
 const redisClient = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379',
-  retry_strategy: (options) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      console.error('Redis server refused connection');
-      return new Error('Redis server refused connection');
-    }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      console.error('Redis retry time exhausted');
-      return new Error('Retry time exhausted');
-    }
-    if (options.attempt > 10) {
-      console.error('Too many Redis connection attempts');
-      return undefined;
-    }
-    // Retry after milliseconds
-    return Math.min(options.attempt * 100, 3000);
+  socket: {
+    connectTimeout: 60000,
+    commandTimeout: 5000,
   }
 });
 

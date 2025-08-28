@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { connectRedis } = require('./redis/client');
-const { runConsumer } = require('./kafka/consumer');
 const geoRoutes = require('./routes/geoRoutes');
 
 const app = express();
@@ -11,8 +10,7 @@ const PORT = process.env.PORT || 3003;
 console.log('🚀 Starting Geospatial Service...');
 console.log('Environment check:', {
   PORT,
-  REDIS_URL: process.env.REDIS_URL ? 'Present' : 'Missing',
-  KAFKA_BROKER_URL: process.env.KAFKA_BROKER_URL ? 'Present' : 'Missing'
+  REDIS_URL: process.env.REDIS_URL ? 'Present' : 'Missing'
 });
 
 // Middleware
@@ -48,14 +46,6 @@ const startServer = async () => {
     console.log('🔌 Connecting to Redis...');
     await connectRedis();
     console.log('✅ Redis connected successfully');
-    
-    console.log('📨 Starting Kafka consumer...');
-    try {
-      await runConsumer();
-      console.log('✅ Kafka consumer started successfully');
-    } catch (kafkaError) {
-      console.log('⚠️ Kafka consumer failed to start (continuing without Kafka):', kafkaError.message);
-    }
     
     app.listen(PORT, () => {
       console.log('🎉 ===== GEOSPATIAL SERVICE STARTED =====');

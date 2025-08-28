@@ -2,7 +2,7 @@ const { Meetup } = require('../models');
 const axios = require('axios');
 
 // use the URL defined in docker-compose.yml
-const GEOSPATIAL_URL = process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:5003';
+const GEOSPATIAL_URL = process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:3003';
 
 exports.createMeetup = async (req, res) => {
   console.log('🚀 Creating meetup...');
@@ -52,8 +52,9 @@ exports.createMeetup = async (req, res) => {
     const meetup = await Meetup.create(meetupData);
     console.log('✅ Meetup created:', meetup.id);
 
-    // 🔥 Call Geospatial Service
+    // 🔥 Call Geospatial Service to add to Redis
     try {
+      console.log('📡 Sending meetup to Geospatial Service...');
       await axios.post(`${GEOSPATIAL_URL}/meetups`, {
         id: meetup.id,
         title: meetup.title,
@@ -63,7 +64,7 @@ exports.createMeetup = async (req, res) => {
         expiresAt: meetup.expiresAt,
         ownerId: meetup.ownerId,
         createdAt: meetup.createdAt,
-      });
+      }, { timeout: 5000 });
       console.log('✅ Sent meetup to Geospatial Service');
     } catch (geoError) {
       console.log('⚠️ Geospatial service error (non-critical):', geoError.message);
@@ -99,12 +100,13 @@ exports.deleteMeetup = async (req, res) => {
     }
 
     await meetup.destroy();
-    console.log('✅ Meetup deleted');
+    console.log('✅ Meetup deleted from database');
 
-    // 🔥 Call Geospatial Service
+    // 🔥 Call Geospatial Service to remove from Redis
     try {
-      await axios.delete(`${GEOSPATIAL_URL}/meetups/${id}`);
-      console.log('✅ Deleted meetup in Geospatial Service');
+      console.log('📡 Removing meetup from Geospatial Service...');
+      await axios.delete(`${GEOSPATIAL_URL}/meetups/${id}`, { timeout: 5000 });
+      console.log('✅ Removed meetup from Geospatial Service');
     } catch (geoError) {
       console.log('⚠️ Geospatial service error (non-critical):', geoError.message);
     }

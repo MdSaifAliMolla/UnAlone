@@ -2,14 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { sequelize } = require('./models');
-const { connectProducer } = require('./kafka/producer');
 
 console.log('🚀 Starting Meetup Service...');
 console.log('Environment check:', {
   PORT: process.env.PORT || 3002,
   DATABASE_URL: process.env.DATABASE_URL ? 'Present' : 'Missing',
-  KAFKA_BROKER_URL: process.env.KAFKA_BROKER_URL ? 'Present' : 'Missing',
-  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing'
+  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing',
+  GEOSPATIAL_SERVICE_URL: process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:3003'
 });
 
 const app = express();
@@ -69,15 +68,6 @@ const startServer = async () => {
     const { Meetup } = require('./models');
     const count = await Meetup.count();
     console.log('✅ Meetup model working, existing meetups:', count);
-    
-    // Initialize Kafka (non-blocking)
-    console.log('📨 Initializing Kafka producer...');
-    try {
-      await connectProducer();
-      console.log('✅ Kafka producer connected');
-    } catch (kafkaError) {
-      console.log('⚠️ Kafka connection failed (continuing without Kafka):', kafkaError.message);
-    }
     
     app.listen(PORT, () => {
       console.log('🎉 ===== MEETUP SERVICE STARTED =====');

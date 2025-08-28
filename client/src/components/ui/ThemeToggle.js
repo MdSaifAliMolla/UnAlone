@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '../../context/ThemeContext'; // Fixed path
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 
 const ThemeToggle = () => {

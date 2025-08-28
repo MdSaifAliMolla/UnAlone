@@ -132,3 +132,70 @@ exports.getMeetupById = async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 };
+
+// New method to add meetup (called by meetup service)
+exports.addMeetup = async (req, res) => {
+  try {
+    const { id, title, description, lat, lng, ownerId, expiresAt, createdAt } = req.body;
+    
+    console.log('📍 Adding meetup to geospatial index:', id);
+
+    if (!redisClient.isOpen) {
+      console.log('❌ Redis not connected');
+      return res.status(503).json({ message: 'Geospatial service unavailable' });
+    }
+
+    // Add to Redis GEO index
+    await redisClient.geoAdd('meetups_geo', {
+      longitude: parseFloat(lng),
+      latitude: parseFloat(lat),
+      member: id.toString(),
+    });
+    console.log('✅ Added to GEO index');
+
+    // Store meetup details
+    await redisClient.hSet(`meetup:${id}`, {
+      id: id.toString(),
+      title,
+      description,
+      lat: lat.toString(),
+      lng: lng.toString(),
+      ownerId: ownerId.toString(),
+      expiresAt,
+      createdAt
+    });
+    console.log('✅ Stored meetup details');
+
+    res.json({ message: 'Meetup added to geospatial index' });
+  } catch (error) {
+    console.error('💥 Add meetup error:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// New method to delete meetup (called by meetup service)
+exports.deleteMeetup = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('🗑️ Removing meetup from geospatial index:', id);
+
+    if (!redisClient.isOpen) {
+      console.log('❌ Redis not connected');
+      return res.status(503).json({ message: 'Geospatial service unavailable' });
+    }
+
+    // Remove from GEO index
+    await redisClient.zRem('meetups_geo', id.toString());
+    console.log('✅ Removed from GEO index');
+    
+    // Remove meetup details
+    await redisClient.del(`meetup:${id}`);
+    console.log('✅ Removed meetup details');
+
+    res.json({ message: 'Meetup removed from geospatial index' });
+  } catch (error) {
+    console.error('💥 Delete meetup error:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
