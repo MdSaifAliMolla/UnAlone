@@ -1,3 +1,4 @@
+// src/contexts/ThemeContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
@@ -11,39 +12,24 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-  // Get initial theme from localStorage or default to light
   const [theme, setTheme] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('unalone-theme');
-      return savedTheme || 'light';
-    }
-    return 'light';
+    const savedTheme = localStorage.getItem('theme');
+    return savedTheme || 'paper';
   });
 
   useEffect(() => {
-    // Apply theme to document
     document.documentElement.setAttribute('data-theme', theme);
-    
-    // Save theme to localStorage
-    localStorage.setItem('unalone-theme', theme);
-    
-    // Update document class for compatibility
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+    setTheme(prev => prev === 'paper' ? 'dark' : 'paper');
   };
 
   const value = {
     theme,
     toggleTheme,
-    isDark: theme === 'dark',
-    isLight: theme === 'light'
+    isDark: theme === 'dark'
   };
 
   return (

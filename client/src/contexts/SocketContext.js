@@ -1,5 +1,6 @@
+// src/contexts/SocketContext.js
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import io from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
 const SocketContext = createContext();
@@ -14,23 +15,24 @@ export const useSocket = () => {
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && user) {
+      // Connect to socket server
       const newSocket = io('http://localhost:4000', {
-        transports: ['websocket']
+        transports: ['websocket', 'polling']
       });
 
       newSocket.on('connect', () => {
-        console.log('Connected to server');
-        setConnected(true);
+        console.log('Connected to socket server');
+        setIsConnected(true);
       });
 
       newSocket.on('disconnect', () => {
-        console.log('Disconnected from server');
-        setConnected(false);
+        console.log('Disconnected from socket server');
+        setIsConnected(false);
       });
 
       newSocket.on('error', (error) => {
@@ -40,20 +42,20 @@ export const SocketProvider = ({ children }) => {
       setSocket(newSocket);
 
       return () => {
-        newSocket.close();
+        newSocket.disconnect();
       };
     } else {
       if (socket) {
-        socket.close();
+        socket.disconnect();
         setSocket(null);
-        setConnected(false);
+        setIsConnected(false);
       }
     }
   }, [isAuthenticated, user]);
 
   const value = {
     socket,
-    connected
+    isConnected
   };
 
   return (

@@ -1,14 +1,62 @@
-const { redisClient } = require('../redis/client');
+// services/4-geospatial-service/src/controllers/geoController.js
+const axios = require('axios');
+
+// In-memory storage for meetups (replace Redis)
+let meetupsStore = new Map();
+
+const calculateDistance = (lat1, lng1, lat2, lng2) => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+exports.createMeetup = async (req, res) => {
+  try {
+    console.log('🚀 Creating meetup in geospatial service...');
+    const meetupData = req.body;
+    
+    // Store meetup in memory
+    meetupsStore.set(meetupData.id, {
+      ...meetupData,
+      lat: parseFloat(meetupData.lat),
+      lng: parseFloat(meetupData.lng)
+    });
+    
+    console.log('✅ Meetup stored in geospatial service');
+    res.status(201).json({ success: true });
+  } catch (error) {
+    console.error('💥 Create meetup error:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+exports.deleteMeetup = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('🗑️ Deleting meetup from geospatial service:', id);
+    
+    meetupsStore.delete(id);
+    console.log('✅ Meetup deleted from geospatial service');
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('💥 Delete meetup error:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
 
 exports.findNearby = async (req, res) => {
   try {
     console.log('🔍 Finding nearby meetups...');
     const { lat, lng, radius = 10 } = req.query;
 
-    console.log('Query params:', { lat, lng, radius });
-
     if (!lat || !lng) {
-      console.log('❌ Missing coordinates');
       return res.status(400).json({ message: 'Latitude and longitude are required.' });
     }
 
@@ -17,73 +65,31 @@ exports.findNearby = async (req, res) => {
     const radiusKm = parseInt(radius);
 
     if (isNaN(latitude) || isNaN(longitude) || isNaN(radiusKm)) {
-      console.log('❌ Invalid coordinates or radius');
       return res.status(400).json({ message: 'Invalid coordinates or radius.' });
     }
 
-    console.log('Parsed values:', { latitude, longitude, radiusKm });
+    const nearbyMeetups = [];
+    const now = new Date();
 
-    // Check if Redis is connected
-    if (!redisClient.isOpen) {
-      console.log('❌ Redis not connected');
-      return res.status(503).json({ message: 'Geospatial service unavailable' });
-    }
-
-    try {
-      // Search for nearby meetups using Redis GEOSEARCH
-      console.log('🔍 Searching Redis for nearby meetups...');
-      const nearbyMeetupIds = await redisClient.geoSearch(
-        'meetups_geo',
-        { longitude, latitude },
-        { radius: radiusKm, unit: 'km' }
-      );
-
-      console.log('Found meetup IDs:', nearbyMeetupIds);
-
-      if (nearbyMeetupIds.length === 0) {
-        console.log('ℹ️ No nearby meetups found');
-        return res.json({ meetups: [] });
-      }
-
-      // Get full details for each meetup
-      const meetups = [];
-      for (const meetupId of nearbyMeetupIds) {
-        try {
-          console.log('📝 Getting details for meetup:', meetupId);
-          const meetupData = await redisClient.hGetAll(`meetup:${meetupId}`);
-          
-          if (meetupData && Object.keys(meetupData).length > 0) {
-            // Check if meetup has expired
-            const expiresAt = new Date(meetupData.expiresAt);
-            if (expiresAt > new Date()) {
-              meetups.push({
-                id: meetupData.id,
-                title: meetupData.title,
-                description: meetupData.description,
-                lat: parseFloat(meetupData.lat),
-                lng: parseFloat(meetupData.lng),
-                ownerId: meetupData.ownerId,
-                expiresAt: meetupData.expiresAt,
-                createdAt: meetupData.createdAt
-              });
-              console.log('✅ Added meetup to results:', meetupData.title);
-            } else {
-              console.log('⏰ Meetup expired, skipping:', meetupData.title);
-            }
-          }
-        } catch (meetupError) {
-          console.log('⚠️ Error getting meetup details for', meetupId, ':', meetupError.message);
+    for (const [id, meetup] of meetupsStore.entries()) {
+      // Check if meetup hasn't expired
+      if (new Date(meetup.expiresAt) > now) {
+        const distance = calculateDistance(latitude, longitude, meetup.lat, meetup.lng);
+        
+        if (distance <= radiusKm) {
+          nearbyMeetups.push({
+            ...meetup,
+            distance: Math.round(distance * 100) / 100 // Round to 2 decimal places
+          });
         }
       }
-
-      console.log('✅ Returning', meetups.length, 'meetups');
-      res.json({ meetups });
-
-    } catch (redisError) {
-      console.error('❌ Redis error:', redisError);
-      return res.status(503).json({ message: 'Geospatial search unavailable' });
     }
 
+    // Sort by distance
+    nearbyMeetups.sort((a, b) => a.distance - b.distance);
+
+    console.log('✅ Found', nearbyMeetups.length, 'nearby meetups');
+    res.json({ meetups: nearbyMeetups });
   } catch (error) {
     console.error('💥 Find nearby error:', error);
     res.status(500).json({ message: 'Server error.' });
@@ -95,37 +101,17 @@ exports.getMeetupById = async (req, res) => {
     const { id } = req.params;
     console.log('🔍 Getting meetup by ID:', id);
     
-    if (!redisClient.isOpen) {
-      console.log('❌ Redis not connected');
-      return res.status(503).json({ message: 'Geospatial service unavailable' });
-    }
+    const meetup = meetupsStore.get(id);
     
-    const meetupData = await redisClient.hGetAll(`meetup:${id}`);
-    
-    if (!meetupData || Object.keys(meetupData).length === 0) {
-      console.log('❌ Meetup not found in Redis');
+    if (!meetup) {
       return res.status(404).json({ message: 'Meetup not found.' });
     }
 
     // Check if meetup has expired
-    const expiresAt = new Date(meetupData.expiresAt);
-    if (expiresAt <= new Date()) {
-      console.log('⏰ Meetup expired');
+    if (new Date(meetup.expiresAt) <= new Date()) {
       return res.status(404).json({ message: 'Meetup has expired.' });
     }
 
-    const meetup = {
-      id: meetupData.id,
-      title: meetupData.title,
-      description: meetupData.description,
-      lat: parseFloat(meetupData.lat),
-      lng: parseFloat(meetupData.lng),
-      ownerId: meetupData.ownerId,
-      expiresAt: meetupData.expiresAt,
-      createdAt: meetupData.createdAt
-    };
-
-    console.log('✅ Meetup found');
     res.json({ meetup });
   } catch (error) {
     console.error('💥 Get meetup error:', error);
@@ -133,69 +119,26 @@ exports.getMeetupById = async (req, res) => {
   }
 };
 
-// New method to add meetup (called by meetup service)
-exports.addMeetup = async (req, res) => {
+exports.getAllMeetups = async (req, res) => {
   try {
-    const { id, title, description, lat, lng, ownerId, expiresAt, createdAt } = req.body;
+    console.log('🔍 Getting all active meetups...');
     
-    console.log('📍 Adding meetup to geospatial index:', id);
-
-    if (!redisClient.isOpen) {
-      console.log('❌ Redis not connected');
-      return res.status(503).json({ message: 'Geospatial service unavailable' });
+    const allMeetups = [];
+    const now = new Date();
+    
+    for (const [id, meetup] of meetupsStore.entries()) {
+      if (new Date(meetup.expiresAt) > now) {
+        allMeetups.push(meetup);
+      }
     }
-
-    // Add to Redis GEO index
-    await redisClient.geoAdd('meetups_geo', {
-      longitude: parseFloat(lng),
-      latitude: parseFloat(lat),
-      member: id.toString(),
-    });
-    console.log('✅ Added to GEO index');
-
-    // Store meetup details
-    await redisClient.hSet(`meetup:${id}`, {
-      id: id.toString(),
-      title,
-      description,
-      lat: lat.toString(),
-      lng: lng.toString(),
-      ownerId: ownerId.toString(),
-      expiresAt,
-      createdAt
-    });
-    console.log('✅ Stored meetup details');
-
-    res.json({ message: 'Meetup added to geospatial index' });
-  } catch (error) {
-    console.error('💥 Add meetup error:', error);
-    res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-// New method to delete meetup (called by meetup service)
-exports.deleteMeetup = async (req, res) => {
-  try {
-    const { id } = req.params;
     
-    console.log('🗑️ Removing meetup from geospatial index:', id);
-
-    if (!redisClient.isOpen) {
-      console.log('❌ Redis not connected');
-      return res.status(503).json({ message: 'Geospatial service unavailable' });
-    }
-
-    // Remove from GEO index
-    await redisClient.zRem('meetups_geo', id.toString());
-    console.log('✅ Removed from GEO index');
+    // Sort by creation date
+    allMeetups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
-    // Remove meetup details
-    await redisClient.del(`meetup:${id}`);
-    console.log('✅ Removed meetup details');
-
-    res.json({ message: 'Meetup removed from geospatial index' });
+    console.log('✅ Found', allMeetups.length, 'active meetups');
+    res.json(allMeetups);
   } catch (error) {
-    console.error('💥 Delete meetup error:', error);
+    console.error('💥 Get all meetups error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

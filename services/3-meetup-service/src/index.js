@@ -1,3 +1,4 @@
+// services/3-meetup-service/src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -7,8 +8,8 @@ console.log('🚀 Starting Meetup Service...');
 console.log('Environment check:', {
   PORT: process.env.PORT || 3002,
   DATABASE_URL: process.env.DATABASE_URL ? 'Present' : 'Missing',
-  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing',
-  GEOSPATIAL_SERVICE_URL: process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:3003'
+  GEOSPATIAL_SERVICE_URL: process.env.GEOSPATIAL_SERVICE_URL || 'http://localhost:5003',
+  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing'
 });
 
 const app = express();
@@ -32,7 +33,7 @@ try {
 }
 
 // Routes
-app.use('/', meetupRoutes); // Changed from '/api/meetups' to '/' since gateway handles prefix
+app.use('/', meetupRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

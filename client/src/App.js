@@ -1,15 +1,19 @@
+// src/App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import { SocketProvider } from './context/SocketContext';
-import { ThemeProvider } from './context/ThemeContext';
-import Navbar from './components/layout/Navbar';
-import ThemeToggle from './components/ui/ThemeToggle';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import GlobalCafePage from './pages/GlobalCafePage';
-import ProfilePage from './pages/ProfilePage';
+import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { SocketProvider } from './contexts/SocketContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import Navbar from './components/Navbar';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Home from './pages/Home';
+import GlobalCafe from './pages/GlobalCafe';
+import Profile from './pages/Profile';
+import MeetupChat from './pages/MeetupChat';
+import './App.css';
 
 function App() {
   return (
@@ -17,18 +21,45 @@ function App() {
       <AuthProvider>
         <SocketProvider>
           <Router>
-            <div className="min-h-screen paper-container transition-all duration-300">
-              <Navbar /> 
-              <ThemeToggle />
-              <main>
+            <div className="min-h-screen bg-base-100 bg-paper bg-noise">
+              <Navbar />
+              <main className="pt-16">
                 <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/cafe" element={<GlobalCafePage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/" element={
+                    <ProtectedRoute>
+                      <Home />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/cafe" element={
+                    <ProtectedRoute>
+                      <GlobalCafe />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/profile" element={
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/meetup/:meetupId/chat" element={
+                    <ProtectedRoute>
+                      <MeetupChat />
+                    </ProtectedRoute>
+                  } />
                 </Routes>
               </main>
+              <Toaster 
+                position="top-right"
+                toastOptions={{
+                  duration: 4000,
+                  style: {
+                    background: 'var(--fallback-b2,oklch(var(--b2)))',
+                    color: 'var(--fallback-bc,oklch(var(--bc)))',
+                    border: '1px solid var(--fallback-b3,oklch(var(--b3)))'
+                  }
+                }}
+              />
             </div>
           </Router>
         </SocketProvider>
