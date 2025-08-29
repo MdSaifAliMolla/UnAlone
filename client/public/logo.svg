@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <circle cx="96" cy="96" r="80" fill="#1a1a1a" stroke="#ffffff" stroke-width="4"/>
+  <circle cx="96" cy="96" r="32" fill="#ffffff"/>
+  <circle cx="96" cy="96" r="12" fill="#1a1a1a"/>
+  <text x="96" y="156" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#1a1a1a" font-weight="bold">UNALONE</text>
+</svg>

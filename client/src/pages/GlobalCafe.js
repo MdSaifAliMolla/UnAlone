@@ -4,7 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
-import { Heart, MessageCircle, Send, Plus, MoreHorizontal } from 'lucide-react';
+import { Heart, MessageCircle, Send, Plus, MoreHorizontal, Coffee } from 'lucide-react';
 import { format } from 'date-fns';
 
 const PostCard = ({ post, onLike, onComment, currentUser }) => {

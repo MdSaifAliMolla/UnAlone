@@ -20,9 +20,13 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Connect to socket server
-      const newSocket = io('http://localhost:4000', {
-        transports: ['websocket', 'polling']
+      // Connect to socket server - use relative URL for production compatibility
+      const socketUrl = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000';
+      
+      const newSocket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+        forceNew: true
       });
 
       newSocket.on('connect', () => {
@@ -32,6 +36,11 @@ export const SocketProvider = ({ children }) => {
 
       newSocket.on('disconnect', () => {
         console.log('Disconnected from socket server');
+        setIsConnected(false);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
         setIsConnected(false);
       });
 

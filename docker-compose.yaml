@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Infrastructure
   postgres:
@@ -12,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   mongodb:
     image: mongo:6
@@ -22,63 +25,70 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Services
-  api-gateway:
-    build: ./services/1-api-gateway
-    ports:
-      - "4000:4000"
-    environment:
-      PORT: 4000
-      AUTH_SERVICE_URL: http://auth-service:5001
-      MEETUP_SERVICE_URL: http://meetup-service:5002
-      GEOSPATIAL_SERVICE_URL: http://geospatial-service:5003
-      CHAT_SERVICE_URL: http://chat-service:5004
-    depends_on:
-      - auth-service
-      - meetup-service
-      - geospatial-service
-      - chat-service
-
   auth-service:
     build: ./services/2-auth-service
-    ports:
-      - "5001:3001"
     environment:
       PORT: 3001
       DATABASE_URL: postgresql://postgres:password@postgres:5432/unalone
       JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   meetup-service:
     build: ./services/3-meetup-service
-    ports:
-      - "5002:3002"
     environment:
       PORT: 3002
       DATABASE_URL: postgresql://postgres:password@postgres:5432/unalone
-      GEOSPATIAL_SERVICE_URL: http://geospatial-service:5003
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      GEOSPATIAL_SERVICE_URL: http://geospatial-service:3003
     depends_on:
-      - postgres
-      - geospatial-service
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   geospatial-service:
     build: ./services/4-geospatial-service
-    ports:
-      - "5003:3003"
     environment:
       PORT: 3003
+    restart: unless-stopped
 
   chat-service:
     build: ./services/5-chat-service
-    ports:
-      - "5004:3004"
     environment:
       PORT: 3004
       MONGODB_URL: mongodb://admin:password@mongodb:27017/unalone?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # API Gateway
+  api-gateway:
+    build: ./services/1-api-gateway
+    environment:
+      PORT: 4000
+      AUTH_SERVICE_URL: http://auth-service:3001
+      MEETUP_SERVICE_URL: http://meetup-service:3002
+      GEOSPATIAL_SERVICE_URL: http://geospatial-service:3003
+      CHAT_SERVICE_URL: http://chat-service:3004
+    ports:
+      - "4000:4000"
+    depends_on:
+      - auth-service
+      - meetup-service
+      - geospatial-service
+      - chat-service
+    restart: unless-stopped
 
   # Frontend
   frontend:
@@ -89,6 +99,7 @@ services:
       REACT_APP_API_URL: http://localhost:4000
     depends_on:
       - api-gateway
+    restart: unless-stopped
 
 volumes:
   postgres_data:
